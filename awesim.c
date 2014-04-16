@@ -10,6 +10,7 @@
 #include "util.h"
 #include "lp_awe_server.h"
 #include "lp_awe_client.h"
+#include "lp_shock.h"
 
 #include "ross.h"
 #include "codes/lp-io.h"
@@ -30,11 +31,11 @@ char jobtrace_file_name[256]={0};
  * prior to calling tw_init */
 const tw_optdef app_opt [] =
 {
-	TWOPT_GROUP("Required config or workload file" ),
-        TWOPT_CHAR("codes-config", conf_file_name, "name of codes configuration file"),
-        TWOPT_CHAR("worktrace", worktrace_file_name, "workload trace of workunit"),
-        TWOPT_CHAR("jobtrace", jobtrace_file_name, "job trace"),
-	{TWOPT_END()}
+    TWOPT_GROUP("Required config or workload file" ),
+    TWOPT_CHAR("codes-config", conf_file_name, "name of codes configuration file"),
+    TWOPT_CHAR("worktrace", worktrace_file_name, "workload trace of workunit"),
+    TWOPT_CHAR("jobtrace", jobtrace_file_name, "job trace"),
+    {TWOPT_END()}
 };
 
 int main(
@@ -90,15 +91,14 @@ int main(
     /* register the server LP type with codes-base 
      * (model-net LP type is registered internally in model_net_set_params() */
     register_lp_awe_server();
+    register_lp_shock();
     register_lp_awe_client();
         
     /* Setup takes the global config object, the registered LPs, and 
      * generates/places the LPs as specified in the configuration file. 
      * This should only be called after ALL LP types have been registered in 
      * codes */
-    
     codes_mapping_setup();
-       
     
     init_awe_server();
         

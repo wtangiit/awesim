@@ -33,13 +33,19 @@ enum awe_event_type
     WORK_CHECKOUT, /*from client*/
     WORK_DONE, /*from client*/
     TIMER_REQUEST,  /*from self timer*/
+    INPUT_DOWNLOADED,
+    COMPUTE_DONE,
+    OUTPUT_UPLOADED,
+    DATA_DOWNLOAD, /*shock event*/
+    DATA_UPLOAD, /*shock event*/
 };
 
 typedef struct awe_msg awe_msg;
 struct awe_msg {
     enum awe_event_type event_type;
     tw_lpid src;          /* source of this request or ack */
-    char object_id[MAX_LENGTH_ID];
+    char object_id[MAX_LENGTH_ID]; 
+    long size;  /*data size*/
     int incremented_flag; /* helper for reverse computation */
 };
 
@@ -59,9 +65,9 @@ struct TaskStat {
     double created;
     double start;
     double end;
-    double size_predata;
-    double size_infile;
-    double size_outfile;
+    long size_predata;
+    long size_infile;
+    long size_outfile;
 };
 
 typedef struct WorkStat WorkStat;
@@ -74,9 +80,9 @@ struct WorkStat {
     double runtime;
     double time_data_in;
     double time_data_out;
-    double size_predata;
-    double size_infile;
-    double size_outfile;
+    long size_predata;
+    long size_infile;
+    long size_outfile;
 };
 
 typedef struct DataObj DataObj;
@@ -124,7 +130,8 @@ typedef struct Job {
     int remain_tasks;
     int task_splits[MAX_NUM_TASKS];
     int task_remainwork[MAX_NUM_TASKS];
-    int task_states[MAX_NUM_TASKS][MAX_NUM_TASKS];
+    int task_dep[MAX_NUM_TASKS][MAX_NUM_TASKS];
+    int task_states[MAX_NUM_TASKS];  /* 0=pending, 1=parsed, 2=completed*/
     char state[MAX_LENGTH_STATE];
     JobStat stats;
 }Job;

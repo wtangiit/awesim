@@ -14,7 +14,7 @@ CC = $(shell $(ROSS)/bin/ross-config --cc)
 LDFLAGS = $(shell $(ROSS)/bin/ross-config --ldflags) -L$(CODESBASE)/lib -L$(CODESNET)/lib
 LDLIBS = $(shell $(ROSS)/bin/ross-config --libs) -lcodes-net -lcodes-base -L/usr/local/Cellar/glib/2.40.0/lib -L/usr/local/opt/gettext/lib -lglib-2.0 -lintl 
 
-SOURCES=awesim.c lp_awe_server.c lp_awe_client.c util.c
+SOURCES=awesim.c lp_awe_server.c lp_awe_client.c lp_shock.c util.c
 #OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=awesim
 

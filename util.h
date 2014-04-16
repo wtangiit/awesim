@@ -14,6 +14,9 @@
 
 #define MAX_LEN_TRACE_LINE 2048
 
+#define download_delay 2
+#define upload_delay 10
+
 typedef int bool;
 #define True 1
 #define False 0

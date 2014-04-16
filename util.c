@@ -49,13 +49,11 @@ tw_stime etime_to_stime(double etime) {
 
 
 static void free_key(gpointer data) {
-    printf("We free key: %s \n", data);
-    free(data);
+    //not used for now
 }
 
 static void free_value(gpointer data) {
-    printf("We free value: %s \n", data);
-    free(data);
+    //not used for now
 }
 
 void print_workunit(Workunit* work) {
@@ -168,6 +166,14 @@ Workunit* parse_workunit_by_trace(gchar* line) {
             work->stats.created = atoi(val);
         } else if (strcmp(key, "runtime")==0) {
             work->stats.runtime = atoi(val);
+        } else if (strcmp(key, "size_infile")==0) {
+            work->stats.size_infile = atoi(val);
+        } else if (strcmp(key, "size_outfile")==0) {
+            work->stats.size_outfile = atoi(val);
+        } else if (strcmp(key, "time_data_in")==0) {
+            work->stats.time_data_in =atof(val);
+        } else if (strcmp(key, "time_data_out")==0){
+            work->stats.time_data_out = atof(val);
         }
     }
     increment_task_splits(job_map, work->id);
@@ -199,7 +205,6 @@ GHashTable* parse_jobtrace(char* jobtrace_path) {
         if (jb->stats.created > finish_epoch_time) {
             finish_epoch_time = jb->stats.created;
         }
-
         g_hash_table_insert(job_map, jb->id, jb);
     }
     
@@ -239,7 +244,7 @@ Job* parse_job_by_trace(gchar* line) {
     strcpy(jb->state, "raw");
     for (int i=0; i<jb->num_tasks; i++) {
         for (int j=0; j<jb->num_tasks; j++) {
-            jb->task_states[i][j] = task_dep_mgrast[i][j];            
+            jb->task_dep[i][j] = task_dep_mgrast[i][j];            
         }
     }
     return jb;
