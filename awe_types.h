@@ -10,10 +10,15 @@
 
 #define MAX_LENGTH_UUID 36
 #define MAX_LENGTH_ID 45
+#define MAX_LENGTH_STATE 15
 #define MAX_NAME_LENGTH_WKLD 512
 #define MAX_IO_FILE_NUM 100
+#define MAX_NUM_TASKS 30
 
 #define TIMER_CHECKOUT_INTERVAL 100
+
+extern  GHashTable *work_map;
+extern  GHashTable *job_map;
 
 /* common event, msg types*/
 
@@ -24,6 +29,7 @@ enum awe_event_type
     KICK_OFF,    /* initial event */
     JOB_SUBMIT,  /*from initilized workload*/
     TASK_READY,  /*from self*/
+    WORK_ENQUEUE,
     WORK_CHECKOUT, /*from client*/
     WORK_DONE, /*from client*/
     TIMER_REQUEST,  /*from self timer*/
@@ -101,17 +107,11 @@ struct Workunit {
 typedef struct Task Task;
 struct Task{
     char id[MAX_LENGTH_ID];
-    int num_inputs;
-    DataObj Inputs[MAX_IO_FILE_NUM];
-    int num_outputs;
-    DataObj Outputs[MAX_IO_FILE_NUM];
-    int num_predata;
-    DataObj Predata[MAX_IO_FILE_NUM];
     char cmd[MAX_NAME_LENGTH_WKLD];
     char state[MAX_NAME_LENGTH_WKLD];
     int splits;
-    int max_split_size;
     int remain_work;
+    int depend[MAX_NUM_TASKS];
     TaskStat stats;
 };
 
@@ -120,13 +120,14 @@ typedef struct Job {
     char username[MAX_NAME_LENGTH_WKLD];
     char project[MAX_NAME_LENGTH_WKLD];
     char pipeline[MAX_NAME_LENGTH_WKLD];
-    double create_time;
-    int num_task;
-    Task Tasks[20];
-    char *state;
+    int num_tasks;
+    int remain_tasks;
+    int task_splits[MAX_NUM_TASKS];
+    int task_remainwork[MAX_NUM_TASKS];
+    int task_states[MAX_NUM_TASKS][MAX_NUM_TASKS];
+    char state[MAX_LENGTH_STATE];
     JobStat stats;
 }Job;
-
 
 typedef struct Site Site;
 struct Site{

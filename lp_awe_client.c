@@ -39,8 +39,14 @@ static void handle_kick_off_event(awe_client_state * ns, tw_bf * b, awe_msg * m,
 static void handle_timer_request_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_work_checkout_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_work_done_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
+
+/*event planners*/
+static void plan_future_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, void* userdata);
+
+/*msg senders*/
 static void send_work_checkout_request(tw_lp *lp);
-static void schedule_futuer_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, void* userdata);
+static void send_work_done_notification(char* work_id, tw_lp *lp);
+
 
 /* set up the function pointers for ROSS, as well as the size of the LP state
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
@@ -162,14 +168,14 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    schedule_futuer_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
+    plan_future_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
     return;
 }
 
 void handle_timer_request_event(awe_client_state * cs, tw_bf * b, awe_msg * m, tw_lp * lp) {
-    if (tw_now(lp) > finish_stime) {
+    /*if (tw_now(lp) > finish_stime) {
         return;
-    }
+    }*/
     send_work_checkout_request(lp);
     /* printf("[%lf][awe_client-gid=%lu,lid=%lu]: send checkout request to server\n", tw_now(lp), lp->gid, lp->id); */
     return;
@@ -177,24 +183,26 @@ void handle_timer_request_event(awe_client_state * cs, tw_bf * b, awe_msg * m, t
 
 void handle_work_checkout_event(awe_client_state * cs, tw_bf * b, awe_msg * m, tw_lp * lp) {
     
-    if (tw_now(lp) > finish_stime) {
+    /*if (tw_now(lp) > finish_stime) {
         return;
-    }
+    }*/
     if (strlen(m->object_id)>0) {
         char* workid = m->object_id;
         Workunit* work = g_hash_table_lookup(work_map, workid);
-        printf("[%lf][awe_client %lu]WC;workid=%s;cmd=%s;runtime=%lf\n", tw_now(lp), lp->gid, m->object_id, work->cmd, work->stats.runtime);
-        schedule_futuer_event(lp, WORK_DONE, work->stats.runtime, workid);
+        printf("[%lf][awe_client][%lu]WC;workid=%s;cmd=%s;runtime=%lf\n", tw_now(lp), lp->gid, m->object_id, work->cmd, work->stats.runtime);
+        plan_future_event(lp, WORK_DONE, work->stats.runtime, workid);
         finish_stime += work->stats.runtime;
     }
 }
 
 void handle_work_done_event(awe_client_state * cs, tw_bf * b, awe_msg * m, tw_lp * lp) {
     cs->total_processed += 1;
-    Workunit* work = g_hash_table_lookup(work_map, m->object_id);
+    char *work_id = m->object_id;
+    Workunit* work = g_hash_table_lookup(work_map, work_id);
     cs->busy_time += work->stats.runtime;
-    printf("[%lf][awe_client %lu]WD;workid=%s\n", tw_now(lp), lp->gid, m->object_id);
-    schedule_futuer_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
+    printf("[%lf][awe_client][%lu]WD;workid=%s\n", tw_now(lp), lp->gid, work_id);
+    send_work_done_notification(work_id, lp);
+    plan_future_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
 }
 
 void send_work_checkout_request(tw_lp *lp) {
@@ -212,7 +220,20 @@ void send_work_checkout_request(tw_lp *lp) {
     return;
 }
 
-void schedule_futuer_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, void* userdata) {
+void send_work_done_notification(char* work_id, tw_lp *lp) {
+    tw_event *e;
+    awe_msg *msg;
+    tw_lpid server_id = get_awe_server_lp_id();
+    e = codes_event_new(server_id, g_tw_lookahead, lp);
+    msg = tw_event_data(e);
+    msg->event_type = WORK_DONE;
+    msg->src = lp->gid;
+    strcpy(msg->object_id, work_id);
+    tw_event_send(e);
+    return;
+}
+
+void plan_future_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, void* userdata) {
     tw_event *e;
     awe_msg *msg;
     e = codes_event_new(lp->gid, interval, lp);

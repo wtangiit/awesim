@@ -24,6 +24,7 @@
  * pre-allocated */
 static char conf_file_name[256]={0};
 char worktrace_file_name[256]={0};
+char jobtrace_file_name[256]={0};
 /* this struct contains default parameters used by ROSS, as well as
  * user-specific arguments to be handled by the ROSS config sys. Pass it in
  * prior to calling tw_init */
@@ -32,6 +33,7 @@ const tw_optdef app_opt [] =
 	TWOPT_GROUP("Required config or workload file" ),
         TWOPT_CHAR("codes-config", conf_file_name, "name of codes configuration file"),
         TWOPT_CHAR("worktrace", worktrace_file_name, "workload trace of workunit"),
+        TWOPT_CHAR("jobtrace", jobtrace_file_name, "job trace"),
 	{TWOPT_END()}
 };
 

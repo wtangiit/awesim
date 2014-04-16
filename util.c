@@ -4,7 +4,26 @@
 
 #include "util.h"
 
+
+
 static Workunit* parse_workunit_by_trace(gchar * line);
+static Job* parse_job_by_trace(gchar *line);
+
+
+/*describing workflow task dependency, hardcoded for now, change later*/
+static int task_dep_mgrast[10][10] = {
+    {0,0,0,0,0,0,0,0,0,0},
+    {1,0,0,0,0,0,0,0,0,0},
+    {0,1,0,0,0,0,0,0,0,0},
+    {0,0,1,0,0,0,0,0,0,0},
+    {0,0,0,1,0,0,0,0,0,0},
+    {0,0,0,0,1,0,0,0,0,0},
+    {1,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,1,0,0,0},
+    {0,0,0,0,0,0,0,1,0,0},
+    {0,0,0,0,0,1,0,0,1,0},
+};
+const char* ready_string = "0000000000";
 
 /*serve as MAX epoch time, Sat, 20 Nov 2286 17:46:39 GMT*/
 double kickoff_epoch_time = 9999999999; 
@@ -48,11 +67,28 @@ void print_workunit(Workunit* work) {
     );
 }
 
+void print_job(Job* job) {
+    printf("jobid=%s;num_tasks=%d;queued=%f;state=%s;task_splits=", 
+        job->id, 
+        job->num_tasks, 
+        job->stats.created,
+        job->state
+    );
+    for (int i=0;i<job->num_tasks;i++) {
+         printf("%d,", job->task_splits[i]); 
+    }
+    printf("\n");
+}
+
 void print_key_value(gpointer key, gpointer value, gpointer user_data)
 {
     if (strcmp((char*)user_data, "work_map")==0) {
         Workunit* work = (Workunit*)value;
         print_workunit(work);
+    }
+    if (strcmp((char*)user_data, "job_map")==0) {
+        Job* job = (Job*)value;
+        print_job(job);
     }
 }
 
@@ -98,9 +134,21 @@ GHashTable* parse_worktrace(char* workload_path) {
     return work_map;
 }
 
+
+static void increment_task_splits(GHashTable *job_map, char* work_id) {
+    gchar ** parts = g_strsplit(work_id, "_", 3);
+    char* job_id = parts[0];
+    int task_id = atoi(parts[1]);
+       
+    Job* job = g_hash_table_lookup(job_map, job_id);
+    job->task_splits[task_id] += 1;
+    job->task_remainwork[task_id] += 1;
+}
+
 Workunit* parse_workunit_by_trace(gchar* line) {
     Workunit* work=NULL;
     work = malloc(sizeof(Workunit));
+    memset(work, 0, sizeof(Workunit));
     gchar ** parts = NULL;
     g_strstrip(line);
     parts = g_strsplit(line, ";", 30);
@@ -122,6 +170,78 @@ Workunit* parse_workunit_by_trace(gchar* line) {
             work->stats.runtime = atoi(val);
         }
     }
+    increment_task_splits(job_map, work->id);
     return work;
+}
+
+GHashTable* parse_jobtrace(char* jobtrace_path) {
+    FILE *f;
+    char line[MAX_LEN_TRACE_LINE];
+    f = fopen(jobtrace_path, "r");
+    if (f == NULL) {
+ 	perror(jobtrace_path);
+	exit(1);
+    }
+    
+    GHashTable *job_map = NULL;
+    job_map =  g_hash_table_new_full(g_str_hash, g_str_equal, free_key, free_value);
+    printf("[awe_server]parsing job trace ...\n");
+    
+    while ( fgets ( line, sizeof(line), f ) != NULL ){ /* read a line */
+        Job* jb=NULL;   
+        jb = parse_job_by_trace((gchar*)line);
+        memset(line, 0, sizeof(line));
+        
+        if (jb->stats.created < kickoff_epoch_time) {
+            kickoff_epoch_time = jb->stats.created;
+        }
+        
+        if (jb->stats.created > finish_epoch_time) {
+            finish_epoch_time = jb->stats.created;
+        }
+
+        g_hash_table_insert(job_map, jb->id, jb);
+    }
+    
+    printf("[awe_server]parsing job trace ... done: %u jobs parsed\n", g_hash_table_size(job_map));
+    
+    finish_stime = etime_to_stime(finish_epoch_time);
+    
+    return job_map;
+}
+
+Job* parse_job_by_trace(gchar* line) {
+    Job* jb=NULL;
+    jb = malloc(sizeof(Job));
+    memset(jb, 0, sizeof(Job));
+    gchar ** parts = NULL;
+    g_strstrip(line);
+    parts = g_strsplit(line, ";", 30);
+    int i;
+    for (i = 0; i < 30; i++) {
+        if (!parts[i])
+            break;
+        gchar **pair = g_strsplit(parts[i], "=", 2);
+        char* key = pair[0];
+        char* val = pair[1];
+        if (strcmp(key, "jobid")==0) {
+            strcpy(jb->id, val);
+        } else if (strcmp(key, "queued")==0) {
+            jb->stats.created = atoi(val);
+        } else if (strcmp(key, "num_tasks")==0) {
+            jb->num_tasks = atoi(val);
+        }
+    }
+    if (jb->num_tasks==0) {
+        jb->num_tasks=10;
+    }
+    jb->remain_tasks = jb->num_tasks;
+    strcpy(jb->state, "raw");
+    for (int i=0; i<jb->num_tasks; i++) {
+        for (int j=0; j<jb->num_tasks; j++) {
+            jb->task_states[i][j] = task_dep_mgrast[i][j];            
+        }
+    }
+    return jb;
 }
 

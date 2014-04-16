@@ -12,8 +12,6 @@
 #include "ross.h"
 
 
-extern  GHashTable *work_map;
-
 extern void init_awe_server();
 extern void register_lp_awe_server();
 extern tw_lpid get_awe_server_lp_id();

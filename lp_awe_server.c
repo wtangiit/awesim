@@ -13,6 +13,7 @@
 #include "codes/lp-type-lookup.h"
 
 GHashTable *work_map=NULL;
+GHashTable *job_map=NULL;
 
 static GQueue* work_queue;
 static GQueue* client_req_queue;
@@ -43,6 +44,14 @@ static void lpf_awe_server_finalize(awe_server_state * ns, tw_lp * lp);
 static void handle_kick_off_event(awe_server_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_job_submit_event(awe_server_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_work_checkout_event(awe_server_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
+static void handle_work_enqueue_event(awe_server_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
+static void handle_work_done_event(awe_server_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
+
+/*event planner*/
+static void plan_work_enqueue_event(char* work_id, tw_lp *lp) ;
+
+/*awe-server specific functions*/
+static void parse_ready_tasks(Job* job, tw_lp * lp);
 
 /* set up the function pointers for ROSS, as well as the size of the LP state
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
@@ -62,11 +71,13 @@ const tw_lptype* awe_server_get_lp_type()
     return(&awe_server_lp);
 }
 
-void init_awe_server() {
-    /*parse workload file and init work_map*/
-    work_map = parse_worktrace(worktrace_file_name);
-}
 
+void init_awe_server() {
+    /*parse workload file and init job_map and work_map, make sure parse job_map first*/
+    job_map = parse_jobtrace(jobtrace_file_name);
+    work_map = parse_worktrace(worktrace_file_name);
+    display_hash_table(job_map, "job_map");
+}
 
 void register_lp_awe_server()
 {
@@ -124,6 +135,12 @@ void lpf_awe_server_event(
         case JOB_SUBMIT:
             handle_job_submit_event(qs, b, m, lp);
             break;
+        case WORK_DONE:
+            handle_work_done_event(qs, b, m, lp);
+            break;
+        case WORK_ENQUEUE:
+            handle_work_enqueue_event(qs, b, m, lp);
+            break;
         case WORK_CHECKOUT:
             handle_work_checkout_event(qs, b, m, lp);
             break;
@@ -150,7 +167,7 @@ void lpf_awe_server_finalize(
     tw_lp * lp)
 {
     qs->end_ts = tw_now(lp);
-    printf("[server %lu]start_time=%lf;end_time=%lf, makespan=%lf\n",
+    printf("[awe_server][%lu]start_time=%lf;end_time=%lf, makespan=%lf\n",
         lp->gid,
         qs->start_ts, 
         qs->end_ts,
@@ -165,25 +182,22 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
+    printf("[awe_server][%lu]handle_kick_off_event\n", lp->gid);
     GHashTableIter iter;
     gpointer key, value;
-    g_hash_table_iter_init(&iter, work_map);
+    g_hash_table_iter_init(&iter, job_map);
     
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        // do something with key and value
-        Workunit* work = (Workunit*)value;
-        /*print_workunit(work);*/
-        
+        Job* job = (Job*)value;
         tw_event *e;
         awe_msg *msg;
         tw_stime submit_time;
+        submit_time =  etime_to_stime(job->stats.created);
         
-        submit_time =  etime_to_stime(work->stats.created);
         e = codes_event_new(lp->gid, submit_time, lp);
         msg = tw_event_data(e);
         msg->event_type = JOB_SUBMIT;
-        strcpy(msg->object_id, work->id);
-        /* event is ready to be processed, send it off */
+        strcpy(msg->object_id, job->id);
         tw_event_send(e);
     }
     return;
@@ -195,14 +209,28 @@ void handle_job_submit_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    printf("[%lf][awe_server]WQ;work=%s\n", tw_now(lp), m->object_id);
+    char* job_id = m->object_id;
+    printf("[%lf][awe_server][%lu]JQ;job=%s\n", tw_now(lp), lp->gid, job_id);
+    Job* job = g_hash_table_lookup(job_map, job_id);
+    assert(job);
+    parse_ready_tasks(job, lp);
+    return;
+}
+
+void handle_work_enqueue_event(
+    awe_server_state * qs,
+    tw_bf * b,
+    awe_msg * m,
+    tw_lp * lp)
+{
+    printf("[%lf][awe_server][%lu]WQ;work=%s\n", tw_now(lp), lp->gid, m->object_id);
     
     char* workid=NULL;
     workid = malloc(sizeof(char[MAX_LENGTH_ID]));
     strcpy(workid, m->object_id);
     assert(workid);
     g_queue_push_tail(work_queue, workid);
-   
+    
     if (!g_queue_is_empty(client_req_queue)) {
         tw_lpid *clientid = g_queue_pop_head(client_req_queue);
         char* workid = g_queue_pop_head(work_queue);
@@ -215,13 +243,14 @@ void handle_job_submit_event(
             strcpy(msg->object_id, workid);
             tw_event_send(e);
         }
+        free(clientid);
     }
     return;
 }
 
 
 void handle_work_checkout_event(
-    awe_server_state * qs,
+    awe_server_state * ns,
     tw_bf * b,
     awe_msg * m,
     tw_lp * lp)
@@ -238,7 +267,7 @@ void handle_work_checkout_event(
     if (!g_queue_is_empty(work_queue)) {
         char workid[MAX_LENGTH_ID];
         strcpy(workid, g_queue_pop_head(work_queue));
-        printf("[%lf][awe_server]WC;work=%s;client=%lu\n", tw_now(lp), workid, m->src);
+        printf("[%lf][awe_server][%lu]WC;work=%s;client=%lu\n", tw_now(lp), lp->gid, workid, m->src);
         assert (strlen(workid) > 10);
         strcpy(msg->object_id, workid);
         tw_event_send(e);
@@ -249,4 +278,67 @@ void handle_work_checkout_event(
         g_queue_push_tail(client_req_queue, clientid);
     }
     return;
+}
+
+void handle_work_done_event(awe_server_state * ns,
+        tw_bf * b,
+        awe_msg * m,
+        tw_lp * lp) 
+{
+    char *work_id = m->object_id;
+    
+    gchar ** parts = g_strsplit(work_id, "_", 3);
+    char* job_id = parts[0];
+    int task_id = atoi(parts[1]);
+    Job* job = g_hash_table_lookup(job_map, job_id);
+    job->task_remainwork[task_id] -= 1;
+    /*handle task done*/
+    if (job->task_remainwork[task_id] == 0) { 
+         printf("[%lf][awe_server][%lu]TD;taskid=%s_%d\n", tw_now(lp), lp->gid, job_id, task_id);
+         for (int j=0; j<job->num_tasks; j++) {
+             job->task_states[j][task_id] = 0;
+         }
+         parse_ready_tasks(job, lp);
+         job->remain_tasks -= 1;
+         /*handle job done*/
+        if (job->remain_tasks==0) {
+             printf("[%lf][awe_server][%lu]JD;jobid=%s\n", tw_now(lp), lp->gid, job_id);
+        }
+    }
+}
+
+void parse_ready_tasks(Job* job, tw_lp * lp) {
+    for (int i=0; i<job->num_tasks; i++) {
+        bool is_ready = True;
+        for (int j=0; j<job->num_tasks; j++) {
+            if (job->task_states[i][j] == 1) {
+                is_ready = False;
+                break;
+            }
+        }
+        if (is_ready && job->task_remainwork[i]>0) {
+            printf("[%lf][awe_server][%lu]TQ;taskid=%s_%d;splits=%d\n", tw_now(lp), lp->gid, job->id, i, job->task_splits[i]);
+            if (job->task_splits[i] == 1) {
+                char work_id[MAX_LENGTH_ID];
+                sprintf(work_id, "%s_%d_0", job->id, i);
+                plan_work_enqueue_event(work_id, lp);
+            } else if (job->task_splits[i] > 1) {
+                for (int j=1; j<=job->task_splits[i]; j++) {
+                    char work_id[MAX_LENGTH_ID];
+                    sprintf(work_id, "%s_%d_%d", job->id, i, j);
+                    plan_work_enqueue_event(work_id, lp);
+                }
+            }
+        }
+    }
+}
+
+void plan_work_enqueue_event(char* work_id, tw_lp *lp) {
+    tw_event *e;
+    awe_msg *msg;
+    e = codes_event_new(lp->gid, g_tw_lookahead, lp);
+    msg = tw_event_data(e);
+    msg->event_type = WORK_ENQUEUE;
+    strcpy(msg->object_id, work_id);
+    tw_event_send(e);
 }
