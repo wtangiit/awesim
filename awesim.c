@@ -13,13 +13,11 @@
 #include "lp_shock.h"
 
 #include "ross.h"
-#include "codes/lp-io.h"
 #include "codes/codes.h"
 #include "codes/codes_mapping.h"
 #include "codes/configuration.h"
 #include "codes/model-net.h"
 #include "codes/lp-type-lookup.h"
-
 
 /* arguments to be handled by ROSS - strings passed in are expected to be
  * pre-allocated */
@@ -83,10 +81,14 @@ int main(
     
     /* Setup the model-net parameters specified in the global config object,
      * returned is the identifier for the network type */
-    /*net_id = model_net_set_params();*/
-    /* in this example, we are using simplenet, which simulates point to point 
-     * communication between any two entities (other networks are trickier to
-     * setup). Hence: */
+    net_id = model_net_set_params();
+    printf("netid=%d\n", net_id);
+    if(net_id != SIMPLEWAN)
+    {
+	    printf("\n please configure with simple_wan network.\n ");
+	    MPI_Finalize();
+	    return 0;
+    }
         
     /* register the server LP type with codes-base 
      * (model-net LP type is registered internally in model_net_set_params() */
@@ -101,12 +103,13 @@ int main(
     codes_mapping_setup();
     
     init_awe_server();
-        
+    
+    printf("+++++%u, \n", g_tw_events_per_pe);    
     /* begin simulation */ 
     tw_run();
     
     /* model-net has the capability of outputting network transmission stats */
-    /*model_net_report_stats(net_id);*/
+    model_net_report_stats(net_id);
 
     tw_end();
     

@@ -5,24 +5,24 @@
 
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 #include <ross-types.h>
 #include "ross.h"
 
+#include "codes/model-net.h"
 #include "codes/codes.h"
 #include "codes/codes_mapping.h"
 #include "codes/configuration.h"
 #include "codes/lp-type-lookup.h"
-
-
-#define DOWNLOAD 0
-#define UPLOAD 1
 
 /* define state*/
 typedef struct awe_client_state awe_client_state;
 struct awe_client_state {
     char current_work[MAX_LENGTH_ID];
     int  total_processed;
-    double busy_time;
+    double data_download_time; /*in sec*/
+    double data_upload_time; /*in sec*/
+    double compute_time;   /* in sec*/
     tw_stime start_ts;    /* time that we started sending requests */
     tw_stime end_ts;      /* time that last request finished */
 };
@@ -40,7 +40,6 @@ static void lpf_awe_client_finalize(awe_client_state * ns, tw_lp * lp);
 
 /*event handlers*/
 static void handle_kick_off_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
-static void handle_timer_request_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_work_checkout_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_compute_done_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
 static void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp);
@@ -50,11 +49,12 @@ static void handle_output_uploaded_event(awe_client_state * ns, tw_bf * b, awe_m
 static void plan_future_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, void* userdata);
 
 /*msg senders*/
-static void send_work_checkout_request(tw_lp *lp);
+static void send_work_checkout_request(tw_lp *lp, tw_stime offset);
+static void send_data_download_request(char* work_id, uint64_t size, tw_lp *lp);
 static void send_work_done_notification(char* work_id, tw_lp *lp);
 
 /*data transfer*/
-static void data_transfer(tw_lp *lp, char* work_id, double size, double latency, awe_event_type event_type);
+static void upload_output_data(char* work_id, uint64_t size, tw_lp *lp);
 
 /* set up the function pointers for ROSS, as well as the size of the LP state
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
@@ -87,14 +87,14 @@ void register_lp_awe_client()
 }
 
 void lpf_awe_client_init(
-    awe_client_state * cs,
+    awe_client_state * ns,
     tw_lp * lp)
 {
     tw_event *e;
     awe_msg *m;
     tw_stime kickoff_time;
     
-    memset(cs, 0, sizeof(*cs));
+    memset(ns, 0, sizeof(*ns));
             
     /* skew each kickoff event slightly to help avoid event ties later on */
     kickoff_time = g_tw_lookahead + tw_rand_unif(lp->rng); ;
@@ -105,6 +105,7 @@ void lpf_awe_client_init(
      * data */ 
     m = tw_event_data(e);
     m->event_type = KICK_OFF;
+    m->src = lp->gid;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
 
@@ -124,13 +125,10 @@ void lpf_awe_client_event(
         case KICK_OFF:
             handle_kick_off_event(ns, b, m, lp);
             break;
-        case TIMER_REQUEST:
-            handle_timer_request_event(ns, b, m, lp);
-            break;
         case WORK_CHECKOUT:
             handle_work_checkout_event(ns, b, m, lp);
             break;
-        case INPUT_DOWNLOADED:
+        case INPUT_DATA_DOWNLOAD:
             handle_input_downloaded_event(ns, b, m, lp);
             break;
         case COMPUTE_DONE:
@@ -162,14 +160,23 @@ void lpf_awe_client_finalize(
     tw_lp * lp)
 {
     ns->end_ts = tw_now(lp);
-    printf("[awe_client][%lu]start_time=%lf, end_time=%lf, makespan=%lf, processed=%d, busy_time=%lf, busy_rate=%lf\n",
+    double makespan = ns_to_s(ns->end_ts - ns->start_ts);
+    double compute_rate = ns->compute_time / makespan;
+    double download_rate = ns->data_download_time / makespan;
+    double upload_rate = ns->data_upload_time / makespan;
+    double total_busy_rate =compute_rate + download_rate + upload_rate;
+
+    printf("[awe_client][%lu]start_time=%lf, end_time=%lf, makespan=%lf, processed=%d, compute_time=%lf, data_download_time=%lf, data_upload_time=%lf, total_busy_rate=%lf\n",
             lp->gid,
-            ns->start_ts, 
-            ns->end_ts,
-            ns->end_ts - ns->start_ts,
+            ns_to_s(ns->start_ts),
+            ns_to_s(ns->end_ts),
+            makespan,
             ns->total_processed,
-            ns->busy_time,
-            ns->busy_time / (ns->end_ts - ns->start_ts) );
+            compute_rate,
+            download_rate,
+            upload_rate,
+            total_busy_rate
+            );
     
     return;
 }
@@ -181,28 +188,20 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    plan_future_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
+    tw_stime offset = ns_tw_lookahead + s_to_ns(lp->gid / 1000);
+    send_work_checkout_request(lp, offset);
     return;
 }
 
-void handle_timer_request_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp) {
-    /*if (tw_now(lp) > finish_stime) {
-        return;
-    }*/
-    send_work_checkout_request(lp);
-    /* printf("[%lf][awe_client-gid=%lu,lid=%lu]: send checkout request to server\n", tw_now(lp), lp->gid, lp->id); */
-    return;
-}
-
-/* workunit checkout -> download inpout from shock */
+/* workunit checkout -> download input from shock */
 void handle_work_checkout_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp) {
     if (strlen(m->object_id)>0) {
         char* workid = m->object_id;
         Workunit* work = g_hash_table_lookup(work_map, workid);
-        printf("[%lf][awe_client][%lu]WC;workid=%s\n", tw_now(lp), lp->gid, workid);
-        data_transfer(lp, workid, work->stats.size_infile, work->stats.time_data_in, DATA_DOWNLOAD);
-        ns->busy_time += work->stats.time_data_in;
-        printf("[%lf][awe_client][%lu]FI;workid=%s\n", tw_now(lp), lp->gid, workid);
+        printf("[%lf][awe_client][%lu]WC;workid=%s\n", now_sec(lp), lp->gid, workid);
+        send_data_download_request(workid, work->stats.size_infile, lp);
+        printf("[%lf][awe_client][%lu]FI;workid=%s;filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_infile);
+        work->stats.st_download_start = now_sec(lp);
     }
 }
 /* input downloaded -> start run command*/
@@ -210,14 +209,20 @@ void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m
     if (strlen(m->object_id)>0) {
         char* workid = m->object_id;
         Workunit* work = g_hash_table_lookup(work_map, workid);
-        printf("[%lf][awe_client][%lu]FD;workid=%s;size_data_in=%lu;time_data_in=%lf\n", 
-                tw_now(lp), 
+        work->stats.st_download_end = now_sec(lp);
+
+        double data_move_time_sec = work->stats.st_download_end - work->stats.st_download_start;
+
+        printf("[%lf][awe_client][%lu]FD;workid=%s;size_data_in=%llu;time_data_in=%lf;time_data_in_sim=%lf\n",
+        		now_sec(lp),
                 lp->gid, 
                 workid,
                 work->stats.size_infile,
-                work->stats.time_data_in);
-        plan_future_event(lp, COMPUTE_DONE, work->stats.runtime, workid);
-        printf("[%lf][awe_client][%lu]WS;workid=%s\n", tw_now(lp), lp->gid, workid);
+                work->stats.time_data_in,
+                data_move_time_sec);
+        plan_future_event(lp, COMPUTE_DONE, s_to_ns(work->stats.runtime), workid);
+        ns->data_download_time += data_move_time_sec;
+        printf("[%lf][awe_client][%lu]WS;workid=%s\n", now_sec(lp), lp->gid, workid);
     }
 }
 
@@ -225,10 +230,10 @@ void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m
 void handle_compute_done_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp) {
     char *workid = m->object_id;
     Workunit* work = g_hash_table_lookup(work_map, workid);
-    printf("[%lf][awe_client][%lu]WD;workid=%s;cmd=%s;runtime=%lf\n", tw_now(lp), lp->gid, workid, work->cmd, work->stats.runtime);
-    ns->busy_time += work->stats.runtime;
-    data_transfer(lp, workid, work->stats.size_outfile, work->stats.time_data_out, DATA_UPLOAD);
-    printf("[%lf][awe_client][%lu]FO;workid=%s\n", tw_now(lp), lp->gid, workid);
+    printf("[%lf][awe_client][%lu]WD;workid=%s;cmd=%s;runtime=%lf\n", now_sec(lp), lp->gid, workid, work->cmd, work->stats.runtime);
+    upload_output_data(workid, work->stats.size_outfile, lp);
+    printf("[%lf][awe_client][%lu]FO;workid=%s;filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_outfile);
+    ns->compute_time += work->stats.runtime;
 }
 
 /* output uploaded -> notify awe-server and ask for next workunit*/
@@ -236,22 +241,28 @@ void handle_output_uploaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m,
     ns->total_processed += 1;
     char *workid = m->object_id;
     Workunit* work = g_hash_table_lookup(work_map, workid);
-    ns->busy_time += work->stats.time_data_out;
-    printf("[%lf][awe_client][%lu]FU;workid=%s;size_data_out=%lu;time_data_out=%lf\n", 
-                tw_now(lp), 
+
+    work->stats.st_upload_end = now_sec(lp);
+
+    double data_move_time_sec = work->stats.st_upload_end - work->stats.st_upload_start;
+
+    printf("[%lf][awe_client][%lu]FU;workid=%s;size_data_out=%llu;time_data_out=%lf;time_data_out_sim=%lf\n",
+    		    now_sec(lp),
                 lp->gid, 
                 workid,
                 work->stats.size_outfile,
-                work->stats.time_data_out);
+                work->stats.time_data_out,
+                work->stats.st_upload_end - work->stats.st_upload_start);
     send_work_done_notification(workid, lp);
-    plan_future_event(lp, TIMER_REQUEST, g_tw_lookahead, NULL);
+    send_work_checkout_request(lp, g_tw_lookahead);
+    ns->data_upload_time += data_move_time_sec;
 }
 
-void send_work_checkout_request(tw_lp *lp) {
+void send_work_checkout_request(tw_lp *lp, tw_stime offset) {
     tw_event *e;
     awe_msg *msg;
     tw_lpid server_id = get_awe_server_lp_id();
-    e = codes_event_new(server_id, g_tw_lookahead, lp);
+    e = codes_event_new(server_id, offset, lp);
     msg = tw_event_data(e);
     msg->event_type = WORK_CHECKOUT;
     msg->src = lp->gid;
@@ -266,7 +277,7 @@ void send_work_done_notification(char* work_id, tw_lp *lp) {
     tw_event *e;
     awe_msg *msg;
     tw_lpid server_id = get_awe_server_lp_id();
-    e = codes_event_new(server_id, g_tw_lookahead, lp);
+    e = codes_event_new(server_id, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
     msg->event_type = WORK_DONE;
     msg->src = lp->gid;
@@ -275,17 +286,41 @@ void send_work_done_notification(char* work_id, tw_lp *lp) {
     return;
 }
 
-void data_transfer(tw_lp *lp, char* work_id, double size, double latency, awe_event_type event_type) {
+void send_data_download_request(char* work_id, uint64_t size, tw_lp *lp) {
     tw_event *e;
     awe_msg *msg;
-    tw_lpid server_id = get_shock_lp_id();
-    e = codes_event_new(server_id, latency, lp);
+    tw_lpid dest_id = get_shock_lp_id();
+    e = codes_event_new(dest_id, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
-    msg->event_type = event_type;
+    msg->event_type = DOWNLOAD_REQUEST;
     msg->src = lp->gid;
+    msg->size = size;
     strcpy(msg->object_id, work_id);
-    msg->size =  size;
     tw_event_send(e);
+    return;
+}
+
+void upload_output_data(char* work_id, uint64_t size, tw_lp *lp) {
+    awe_msg m_remote;
+    /*awe_msg m_local;*/
+    
+    tw_lpid dest_id = get_shock_lp_id();
+    
+    m_remote.event_type = OUTPUT_DATA_UPLOAD;
+    m_remote.src = lp->gid;
+    strcpy(m_remote.object_id, work_id);
+    m_remote.size =  size;
+    
+    /*m_local.event_type = OUTPUT_UPLOADED;
+    m_local.src = lp->gid;
+    strcpy(m_local.object_id, work_id);
+    m_local.size =  size;*/
+    
+    Workunit* work = g_hash_table_lookup(work_map, work_id);
+    work->stats.st_upload_start = now_sec(lp);
+
+    model_net_event(net_id, "upload", dest_id, size, sizeof(awe_msg), 
+            (const void*)&m_remote, 0, NULL, lp);
     return;
 }
 
@@ -295,6 +330,7 @@ void plan_future_event(tw_lp *lp, awe_event_type event_type, tw_stime interval, 
     e = codes_event_new(lp->gid, interval, lp);
     msg = tw_event_data(e);
     msg->event_type = event_type;
+    msg->src = lp->gid;
     if (userdata) {
         strcpy(msg->object_id, (char*)userdata);
     }

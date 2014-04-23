@@ -4,11 +4,10 @@
 
 #include "util.h"
 
-
+int net_id = 0;
 
 static Workunit* parse_workunit_by_trace(gchar * line);
 static Job* parse_job_by_trace(gchar *line);
-
 
 /*describing workflow task dependency, hardcoded for now, change later*/
 static int task_dep_mgrast[10][10] = {
@@ -60,7 +59,7 @@ void print_workunit(Workunit* work) {
     printf("workid=%s;cmd=%s;queued=%f;runtime=%f;\n", 
         work->id, 
         work->cmd, 
-        work->stats.created,
+        work->stats.st_created,
         work->stats.runtime
     );
 }
@@ -114,14 +113,6 @@ GHashTable* parse_worktrace(char* workload_path) {
         work = parse_workunit_by_trace((gchar*)line);
         memset(line, 0, sizeof(line));
         
-        if (work->stats.created < kickoff_epoch_time) {
-            kickoff_epoch_time = work->stats.created;
-        }
-        
-        if (work->stats.created > finish_epoch_time) {
-            finish_epoch_time = work->stats.created;
-        }
-
         g_hash_table_insert(work_map, work->id, work);
     }
     
@@ -131,7 +122,6 @@ GHashTable* parse_worktrace(char* workload_path) {
     
     return work_map;
 }
-
 
 static void increment_task_splits(GHashTable *job_map, char* work_id) {
     gchar ** parts = g_strsplit(work_id, "_", 3);
@@ -158,18 +148,17 @@ Workunit* parse_workunit_by_trace(gchar* line) {
        /* printf("key=%s, val=%s\n", pair[0], pair[1]);*/
         char* key = pair[0];
         char* val = pair[1];
+        char *endptr;
         if (strcmp(key, "workid")==0) {
             strcpy(work->id, val);
         } else if (strcmp(key, "cmd")==0) {
             strcpy(work->cmd, val);
-        } else if (strcmp(key, "queued")==0) {
-            work->stats.created = atoi(val);
         } else if (strcmp(key, "runtime")==0) {
             work->stats.runtime = atoi(val);
         } else if (strcmp(key, "size_infile")==0) {
-            work->stats.size_infile = atoi(val);
+            work->stats.size_infile = strtoll(val, &endptr, 10);
         } else if (strcmp(key, "size_outfile")==0) {
-            work->stats.size_outfile = atoi(val);
+            work->stats.size_outfile = strtoll(val, &endptr, 10);
         } else if (strcmp(key, "time_data_in")==0) {
             work->stats.time_data_in =atof(val);
         } else if (strcmp(key, "time_data_out")==0){

@@ -7,6 +7,7 @@
 #include "util.h"
 #include "awe_types.h"
 
+#include "codes/model-net.h"
 #include "codes/codes.h"
 #include "codes/codes_mapping.h"
 #include "codes/configuration.h"
@@ -85,13 +86,14 @@ void lpf_shock_init(
     
     memset(ns, 0, sizeof(*ns));
     /* skew each kickoff event slightly to help avoid event ties later on */
-    kickoff_time = 0;
+    kickoff_time = 0.00;
     /* first create the event (time arg is an offset, not absolute time) */
     e = codes_event_new(lp->gid, kickoff_time, lp);
     /* after event is created, grab the allocated message and set msg-specific
      * data */ 
     m = tw_event_data(e);
     m->event_type = KICK_OFF;
+    m->src = lp->gid;
     /* event is ready to be processed, send it off */
     tw_event_send(e);
     return;
@@ -105,14 +107,15 @@ void lpf_shock_event(
     awe_msg * m,
     tw_lp * lp)
 {
-   switch (m->event_type)
+    switch (m->event_type)
     {
         case KICK_OFF:
            handle_kick_off_event(ns, b, m, lp);
-        case DATA_DOWNLOAD:
+           break;
+        case DOWNLOAD_REQUEST:   
             handle_data_download_event(ns, b, m, lp);
             break;
-        case DATA_UPLOAD:
+        case OUTPUT_DATA_UPLOAD:
             handle_data_upload_event(ns, b, m, lp);
             break;
         default:
@@ -149,6 +152,8 @@ void lpf_shock_finalize(
     return;
 }
 
+
+
 /* handle initial event (initialize job submission) */
 void handle_kick_off_event(
     shock_state * qs,
@@ -156,7 +161,7 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    printf("[shock][%lu]Start serving data...\n", lp->gid);
+    printf("[%lf][shock][%lu]Start serving data...\n", now_sec(lp), lp->gid);
     return;
 }
 
@@ -166,14 +171,20 @@ void handle_data_download_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    tw_event *e;
-    awe_msg *msg;
-    e = codes_event_new(m->src, g_tw_lookahead, lp);
-    msg = tw_event_data(e);
-    msg->event_type = INPUT_DOWNLOADED;
-    strcpy(msg->object_id, m->object_id);
-    tw_event_send(e);
+    awe_msg m_remote;
+    tw_lpid dest_id = m->src;
+    
+    m_remote.event_type = INPUT_DATA_DOWNLOAD;
+    m_remote.src = lp->gid;
+    strcpy(m_remote.object_id, m->object_id);
+    m_remote.size =  m->size;
+
+    printf("[%lf][shock][%lu][StartSending]client=%lu;filesize=%llu\n", now_sec(lp), lp->gid, m->src, m->size);
+
+    model_net_event(net_id, "download", dest_id, m->size, sizeof(awe_msg), (const void*)&m_remote, 0, NULL, lp);
+    
     ns->size_download += m->size;
+   
     return;
 }
 
@@ -183,14 +194,19 @@ void handle_data_upload_event(
     awe_msg * m,
     tw_lp * lp)
 {
+	printf("[%lf][shock][%lu][Received]client=%lu;filesize=%llu...\n",  now_sec(lp), lp->gid, m->src, m->size);
+    ns->size_upload += m->size;
+
     tw_event *e;
     awe_msg *msg;
-    e = codes_event_new(m->src, g_tw_lookahead, lp);
+    tw_lpid dest_id = m->src;
+    e = codes_event_new(dest_id, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
     msg->event_type = OUTPUT_UPLOADED;
+    msg->src = lp->gid;
+    msg->size = m->size;
     strcpy(msg->object_id, m->object_id);
     tw_event_send(e);
-    ns->size_upload += m->size;
     return;
 }
 

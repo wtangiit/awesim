@@ -8,6 +8,8 @@
 #ifndef AWE_TYPES_H
 #define	AWE_TYPES_H
 
+#include <stdint.h>
+
 #define MAX_LENGTH_UUID 36
 #define MAX_LENGTH_ID 45
 #define MAX_LENGTH_STATE 15
@@ -16,6 +18,8 @@
 #define MAX_NUM_TASKS 30
 
 #define TIMER_CHECKOUT_INTERVAL 100
+
+
 
 extern  GHashTable *work_map;
 extern  GHashTable *job_map;
@@ -32,12 +36,11 @@ enum awe_event_type
     WORK_ENQUEUE,
     WORK_CHECKOUT, /*from client*/
     WORK_DONE, /*from client*/
-    TIMER_REQUEST,  /*from self timer*/
-    INPUT_DOWNLOADED,
+    DOWNLOAD_REQUEST,  /* client -> shock, to request input*/
+    INPUT_DATA_DOWNLOAD, /* shock -> client, to send input data*/
     COMPUTE_DONE,
-    OUTPUT_UPLOADED,
-    DATA_DOWNLOAD, /*shock event*/
-    DATA_UPLOAD, /*shock event*/
+    OUTPUT_DATA_UPLOAD, /* client -> shock, to upload output data*/
+    OUTPUT_UPLOADED,  /* client -> client, local event for OUTPUT_DATA_UPLOAD*/
 };
 
 typedef struct awe_msg awe_msg;
@@ -45,14 +48,13 @@ struct awe_msg {
     enum awe_event_type event_type;
     tw_lpid src;          /* source of this request or ack */
     char object_id[MAX_LENGTH_ID]; 
-    long size;  /*data size*/
+    uint64_t size;  /*data size*/
     int incremented_flag; /* helper for reverse computation */
 };
 
 /* end of ross common msg types*/
 
 /* data structure for AWE elements*/
-
 typedef struct JobStat JobStat;
 struct JobStat  {
     double created;
@@ -72,17 +74,19 @@ struct TaskStat {
 
 typedef struct WorkStat WorkStat;
 struct WorkStat {
-    double created;
-    double done;
-    double checkout;
-    double deliver;
+    double st_created;
+    double st_checkout;
+    double st_download_start;
+    double st_download_end;
+    double st_upload_start;
+    double st_upload_end;
     double time_predata_in;
     double runtime;
     double time_data_in;
     double time_data_out;
-    long size_predata;
-    long size_infile;
-    long size_outfile;
+    uint64_t size_predata;
+    uint64_t size_infile;
+    uint64_t size_outfile;
 };
 
 typedef struct DataObj DataObj;
