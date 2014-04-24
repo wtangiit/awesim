@@ -48,11 +48,11 @@ tw_stime etime_to_stime(double etime) {
 
 
 static void free_key(gpointer data) {
-    //not used for now
+	//not used for now (key is part of the data thus can be freed with the data)
 }
 
 static void free_value(gpointer data) {
-    //not used for now
+	free(data);
 }
 
 void print_workunit(Workunit* work) {

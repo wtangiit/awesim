@@ -74,31 +74,35 @@ const tw_lptype* awe_server_get_lp_type()
     return(&awe_server_lp);
 }
 
+static void delete_job_entry(gpointer key, gpointer user_data) {
+	g_hash_table_remove(job_map, (char*)key);
+	printf("[awe-server]remove job %s from job_map\n", (char*)key);
+}
+
 static int jobmap_cleaning() {
     GHashTableIter iter;
     gpointer key, value;
     g_hash_table_iter_init(&iter, job_map);
-    
+    GSList* invalid_job_list=NULL;
     int ct = 0;
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         Job* job = (Job*)value;
         if (job->num_tasks == 0) {
-             g_hash_table_remove(job_map, key);
-             free(value);
-             ct ++;
+        	 invalid_job_list = g_slist_append(invalid_job_list, job->id);
+        	 ct ++;
              continue;    
         }
-        /* clean jobs with any task with split==0, meaning no workunit data parsed*/
-        for (int i=0;i<job->num_tasks;i++){
+        /* clean jobs with any task with split==0, meaning no workunit data available from the trace*/
+        for (int i=0;i<job->num_tasks;i++) {
             if (job->task_splits[i] == 0) {
-                printf("[awe_server]to remove job %s\n", job->id);
-                g_hash_table_remove (job_map, key);
-                free(value);
+                invalid_job_list = g_slist_append(invalid_job_list, job->id);
                 ct ++;
                 continue;
             }
         }
     }
+    g_slist_foreach(invalid_job_list, delete_job_entry, &ct);
+    g_slist_free(invalid_job_list);
     return ct;
 }
 
@@ -234,7 +238,6 @@ void handle_kick_off_event(
         msg->event_type = JOB_SUBMIT;
         strcpy(msg->object_id, job->id);
         tw_event_send(e);
-        
     }
     return;
 }
