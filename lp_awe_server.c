@@ -113,6 +113,7 @@ void init_awe_server() {
     int ct = jobmap_cleaning(); 
     printf("[awe_server]checking jobs...done, %d invalid jobs removed\n", ct);
     //display_hash_table(job_map, "job_map");
+    printf("[awe_server]total valid jobs: %d\n", g_hash_table_size (job_map));
 }
 
 void register_lp_awe_server()

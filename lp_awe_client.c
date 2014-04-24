@@ -311,11 +311,6 @@ void upload_output_data(char* work_id, uint64_t size, tw_lp *lp) {
     strcpy(m_remote.object_id, work_id);
     m_remote.size =  size;
     
-    /*m_local.event_type = OUTPUT_UPLOADED;
-    m_local.src = lp->gid;
-    strcpy(m_local.object_id, work_id);
-    m_local.size =  size;*/
-    
     Workunit* work = g_hash_table_lookup(work_map, work_id);
     work->stats.st_upload_start = now_sec(lp);
 

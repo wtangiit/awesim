@@ -106,14 +106,15 @@ GHashTable* parse_worktrace(char* workload_path) {
     
     GHashTable *work_map = NULL;
     work_map =  g_hash_table_new_full(g_str_hash, g_str_equal, free_key, free_value);
-    printf("[awe_server]parsing work trace ...\n");
+    printf("[awe_server]parsing work trace, removing some invalid jobs lacking data (e.g. workunit input/output size=0) ...\n");
     
     while ( fgets ( line, sizeof(line), f ) != NULL ){ /* read a line */
         Workunit* work=NULL;   
         work = parse_workunit_by_trace((gchar*)line);
         memset(line, 0, sizeof(line));
-        
-        g_hash_table_insert(work_map, work->id, work);
+        if (work) {
+        	g_hash_table_insert(work_map, work->id, work);
+        }
     }
     
     printf("[awe_server]parsing work trace ... done: %u workunit parsed\n", g_hash_table_size(work_map));
@@ -129,8 +130,10 @@ static void increment_task_splits(GHashTable *job_map, char* work_id) {
     int task_id = atoi(parts[1]);
        
     Job* job = g_hash_table_lookup(job_map, job_id);
-    job->task_splits[task_id] += 1;
-    job->task_remainwork[task_id] += 1;
+    if (job) {
+    	job->task_splits[task_id] += 1;
+        job->task_remainwork[task_id] += 1;
+    }
 }
 
 Workunit* parse_workunit_by_trace(gchar* line) {
@@ -165,6 +168,20 @@ Workunit* parse_workunit_by_trace(gchar* line) {
             work->stats.time_data_out = atof(val);
         }
     }
+
+    if (strlen(work->id)==0){
+       	return NULL;
+    }
+
+    //filtering out jobs with 0-sized input/output size
+    if (work->stats.size_outfile == 0 || work->stats.size_infile==0 ) {
+        gchar ** parts = g_strsplit(work->id, "_", 3);
+        char* job_id = parts[0];
+        g_hash_table_remove(job_map, job_id);
+        //printf("input size of work %s is 0, delete job %s\n", work->id, job_id);
+        return NULL;
+    }
+
     increment_task_splits(job_map, work->id);
     return work;
 }
