@@ -100,6 +100,9 @@ static int jobmap_cleaning() {
                 continue;
             }
         }
+        if (job->stats.created < kickoff_epoch_time) {
+            kickoff_epoch_time = job->stats.created;
+        }
     }
     g_slist_foreach(invalid_job_list, delete_job_entry, &ct);
     g_slist_free(invalid_job_list);

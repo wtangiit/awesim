@@ -27,8 +27,6 @@ const char* ready_string = "0000000000";
 
 /*serve as MAX epoch time, Sat, 20 Nov 2286 17:46:39 GMT*/
 double kickoff_epoch_time = 9999999999; 
-double finish_epoch_time = 0;
-tw_stime finish_stime = 0;
 
 /* convert ns to seconds */
 tw_stime ns_to_s(tw_stime ns)
@@ -120,8 +118,6 @@ GHashTable* parse_worktrace(char* workload_path) {
     
     printf("[awe_server]parsing work trace ... done: %u workunit parsed\n", g_hash_table_size(work_map));
     
-    finish_stime = etime_to_stime(finish_epoch_time);
-    
     return work_map;
 }
 
@@ -204,21 +200,11 @@ GHashTable* parse_jobtrace(char* jobtrace_path) {
         Job* jb=NULL;   
         jb = parse_job_by_trace((gchar*)line);
         memset(line, 0, sizeof(line));
-        
-        if (jb->stats.created < kickoff_epoch_time) {
-            kickoff_epoch_time = jb->stats.created;
-        }
-        
-        if (jb->stats.created > finish_epoch_time) {
-            finish_epoch_time = jb->stats.created;
-        }
         g_hash_table_insert(job_map, jb->id, jb);
     }
     
     printf("[awe_server]parsing job trace ... done: %u jobs parsed\n", g_hash_table_size(job_map));
-    
-    finish_stime = etime_to_stime(finish_epoch_time);
-    
+
     return job_map;
 }
 

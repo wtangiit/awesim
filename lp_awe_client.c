@@ -314,7 +314,7 @@ void upload_output_data(char* work_id, uint64_t size, tw_lp *lp) {
     Workunit* work = g_hash_table_lookup(work_map, work_id);
     work->stats.st_upload_start = now_sec(lp);
 
-    model_net_event(net_id, "upload", dest_id, size, sizeof(awe_msg), 
+    model_net_event(net_id, "upload", dest_id, size, sizeof(awe_msg),
             (const void*)&m_remote, 0, NULL, lp);
     return;
 }

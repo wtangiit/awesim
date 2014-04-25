@@ -25,8 +25,6 @@ typedef int bool;
 extern int net_id;
 
 extern double kickoff_epoch_time;
-extern double finish_epoch_time;
-extern tw_stime finish_stime;
 
 extern char worktrace_file_name[256];
 extern char jobtrace_file_name[256];
