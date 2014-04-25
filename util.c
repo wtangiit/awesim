@@ -5,6 +5,7 @@
 #include "util.h"
 
 int net_id = 0;
+FILE *event_log = NULL;
 
 static Workunit* parse_workunit_by_trace(gchar * line);
 static Job* parse_job_by_trace(gchar *line);

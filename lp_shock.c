@@ -161,7 +161,7 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    printf("[%lf][shock][%lu]Start serving data...\n", now_sec(lp), lp->gid);
+    printf("[%lf][shock][%lu]Start serving...\n", now_sec(lp), lp->gid);
     return;
 }
 
@@ -179,7 +179,7 @@ void handle_data_download_event(
     strcpy(m_remote.object_id, m->object_id);
     m_remote.size =  m->size;
 
-    printf("[%lf][shock][%lu][StartSending]client=%lu;filesize=%llu\n", now_sec(lp), lp->gid, m->src, m->size);
+    //printf("[%lf][shock][%lu][StartSending]client=%lu;filesize=%llu\n", now_sec(lp), lp->gid, m->src, m->size);
 
     model_net_event(net_id, "download", dest_id, m->size, sizeof(awe_msg), (const void*)&m_remote, 0, NULL, lp);
     
@@ -194,7 +194,7 @@ void handle_data_upload_event(
     awe_msg * m,
     tw_lp * lp)
 {
-	printf("[%lf][shock][%lu][Received]client=%lu;filesize=%llu...\n",  now_sec(lp), lp->gid, m->src, m->size);
+	//printf("[%lf][shock][%lu][Received]client=%lu;filesize=%llu...\n",  now_sec(lp), lp->gid, m->src, m->size);
     ns->size_upload += m->size;
 
     tw_event *e;

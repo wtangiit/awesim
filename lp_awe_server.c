@@ -223,7 +223,7 @@ void handle_kick_off_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    printf("[%lf][awe_server][%lu]Starting serving\n", now_sec(lp), lp->gid);
+    printf("%lf;awe_server;%lu]Start serving\n", now_sec(lp), lp->gid);
     GHashTableIter iter;
     gpointer key, value;
     g_hash_table_iter_init(&iter, job_map);
@@ -250,7 +250,7 @@ void handle_job_submit_event(
     tw_lp * lp)
 {
     char* job_id = m->object_id;
-    printf("[%lf][awe_server][%lu]JQ;job=%s\n", now_sec(lp), lp->gid, job_id);
+    fprintf(event_log, "%lf;awe_server;%lu;JQ;job=%s\n", now_sec(lp), lp->gid, job_id);
     Job* job = g_hash_table_lookup(job_map, job_id);
     assert(job);
     parse_ready_tasks(job, lp);
@@ -263,7 +263,7 @@ void handle_work_enqueue_event(
     awe_msg * m,
     tw_lp * lp)
 {
-    printf("[%lf][awe_server][%lu]WQ;work=%s\n", now_sec(lp), lp->gid, m->object_id);
+    fprintf(event_log, "%lf;awe_server;%lu;WQ;work=%s\n", now_sec(lp), lp->gid, m->object_id);
     
     char* workid=NULL;
     workid = malloc(sizeof(char[MAX_LENGTH_ID]));
@@ -308,7 +308,7 @@ void handle_work_checkout_event(
     if (!g_queue_is_empty(work_queue)) {
         char workid[MAX_LENGTH_ID];
         strcpy(workid, g_queue_pop_head(work_queue));
-        printf("[%lf][awe_server][%lu]WC;work=%s;client=%lu\n", now_sec(lp), lp->gid, workid, m->src);
+        fprintf(event_log, "%lf;awe_server;%lu;WC;work=%s client=%lu\n", now_sec(lp), lp->gid, workid, m->src);
         assert (strlen(workid) > 10);
         strcpy(msg->object_id, workid);
         tw_event_send(e);
@@ -333,11 +333,11 @@ void handle_work_done_event(awe_server_state * ns,
     int task_id = atoi(parts[1]);
     Job* job = g_hash_table_lookup(job_map, job_id);
     job->task_remainwork[task_id] -= 1;
-    printf("[%lf][awe_server][%lu]WD;workid=%s\n", now_sec(lp), lp->gid, work_id);
+    fprintf(event_log, "%lf;awe_server;%lu;WD;workid=%s\n", now_sec(lp), lp->gid, work_id);
     ns->total_work += 1;
     /*handle task done*/
     if (job->task_remainwork[task_id] == 0) { 
-         printf("[%lf][awe_server][%lu]TD;taskid=%s_%d\n", now_sec(lp), lp->gid, job_id, task_id);
+    	 fprintf(event_log, "%lf;awe_server;%lu;TD;taskid=%s_%d\n", now_sec(lp), lp->gid, job_id, task_id);
          ns->total_task +=1;
          job->task_states[task_id]=2;
          for (int j=0; j<job->num_tasks; j++) {
@@ -347,7 +347,7 @@ void handle_work_done_event(awe_server_state * ns,
          job->remain_tasks -= 1;
          /*handle job done*/
         if (job->remain_tasks==0) {
-             printf("[%lf][awe_server][%lu]JD;jobid=%s\n", now_sec(lp), lp->gid, job_id);
+             fprintf(event_log, "%lf;awe_server;%lu;JD;jobid=%s\n", now_sec(lp), lp->gid, job_id);
              ns->total_job += 1;
         }
     }
@@ -363,7 +363,7 @@ void parse_ready_tasks(Job* job, tw_lp * lp) {
             }
         }
         if (is_ready && job->task_states[i]==0) {
-            printf("[%lf][awe_server][%lu]TQ;taskid=%s_%d;splits=%d\n", now_sec(lp), lp->gid, job->id, i, job->task_splits[i]);
+            fprintf(event_log, "%lf;awe_server;%lu;TQ;taskid=%s_%d splits=%d\n", now_sec(lp), lp->gid, job->id, i, job->task_splits[i]);
             job->task_states[i]=1;
             if (job->task_splits[i] == 1) {
                 char work_id[MAX_LENGTH_ID];

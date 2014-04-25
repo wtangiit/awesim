@@ -198,9 +198,9 @@ void handle_work_checkout_event(awe_client_state * ns, tw_bf * b, awe_msg * m, t
     if (strlen(m->object_id)>0) {
         char* workid = m->object_id;
         Workunit* work = g_hash_table_lookup(work_map, workid);
-        printf("[%lf][awe_client][%lu]WC;workid=%s\n", now_sec(lp), lp->gid, workid);
+        fprintf(event_log, "%lf;awe_client;%lu;WC;workid=%s\n", now_sec(lp), lp->gid, workid);
         send_data_download_request(workid, work->stats.size_infile, lp);
-        printf("[%lf][awe_client][%lu]FI;workid=%s;filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_infile);
+        fprintf(event_log, "%lf;awe_client;%lu;FI;workid=%s filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_infile);
         work->stats.st_download_start = now_sec(lp);
     }
 }
@@ -213,7 +213,7 @@ void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m
 
         double data_move_time_sec = work->stats.st_download_end - work->stats.st_download_start;
 
-        printf("[%lf][awe_client][%lu]FD;workid=%s;size_data_in=%llu;time_data_in=%lf;time_data_in_sim=%lf\n",
+        fprintf(event_log, "%lf;awe_client;%lu;FD;workid=%s size_data_in=%llu time_data_in=%lf time_data_in_sim=%lf\n",
         		now_sec(lp),
                 lp->gid, 
                 workid,
@@ -222,7 +222,7 @@ void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m
                 data_move_time_sec);
         plan_future_event(lp, COMPUTE_DONE, s_to_ns(work->stats.runtime), workid);
         ns->data_download_time += data_move_time_sec;
-        printf("[%lf][awe_client][%lu]WS;workid=%s\n", now_sec(lp), lp->gid, workid);
+        fprintf(event_log, "%lf;awe_client;%lu;WS;workid=%s\n", now_sec(lp), lp->gid, workid);
     }
 }
 
@@ -230,9 +230,9 @@ void handle_input_downloaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m
 void handle_compute_done_event(awe_client_state * ns, tw_bf * b, awe_msg * m, tw_lp * lp) {
     char *workid = m->object_id;
     Workunit* work = g_hash_table_lookup(work_map, workid);
-    printf("[%lf][awe_client][%lu]WD;workid=%s;cmd=%s;runtime=%lf\n", now_sec(lp), lp->gid, workid, work->cmd, work->stats.runtime);
+    fprintf(event_log, "%lf;awe_client;%lu;WD;workid=%s cmd=%s runtime=%lf\n", now_sec(lp), lp->gid, workid, work->cmd, work->stats.runtime);
     upload_output_data(workid, work->stats.size_outfile, lp);
-    printf("[%lf][awe_client][%lu]FO;workid=%s;filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_outfile);
+    fprintf(event_log, "%lf;awe_client;%lu;FO;workid=%s filesize=%llu\n", now_sec(lp), lp->gid, workid, work->stats.size_outfile);
     ns->compute_time += work->stats.runtime;
 }
 
@@ -246,7 +246,7 @@ void handle_output_uploaded_event(awe_client_state * ns, tw_bf * b, awe_msg * m,
 
     double data_move_time_sec = work->stats.st_upload_end - work->stats.st_upload_start;
 
-    printf("[%lf][awe_client][%lu]FU;workid=%s;size_data_out=%llu;time_data_out=%lf;time_data_out_sim=%lf\n",
+    fprintf(event_log, "%lf;awe_client;%lu;FU;workid=%s size_data_out=%llu time_data_out=%lf time_data_out_sim=%lf\n",
     		    now_sec(lp),
                 lp->gid, 
                 workid,

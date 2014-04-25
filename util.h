@@ -33,6 +33,8 @@ extern char jobtrace_file_name[256];
 
 extern const char* ready_string;
 
+extern FILE *event_log;
+
 tw_stime etime_to_stime(double etime);
 
 tw_stime ns_to_s(tw_stime ns);

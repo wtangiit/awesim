@@ -43,6 +43,8 @@ int main(
     int nprocs;
     int rank;
     
+    event_log = fopen("awesim_output.log","w");
+
     /*printf("I am here: line number %d in file %s\n", __LINE__, __FILE__);*/
     
     /* TODO: explain why we need this (ROSS has cutoff??) */
@@ -112,7 +114,8 @@ int main(
     model_net_report_stats(net_id);
 
     tw_end();
-    
+
+    fclose(event_log);
     return 0;
 }
 
