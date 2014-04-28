@@ -24,6 +24,7 @@
 static char conf_file_name[256]={0};
 char worktrace_file_name[256]={0};
 char jobtrace_file_name[256]={0};
+char output_file_name[256]={0};
 /* this struct contains default parameters used by ROSS, as well as
  * user-specific arguments to be handled by the ROSS config sys. Pass it in
  * prior to calling tw_init */
@@ -33,6 +34,7 @@ const tw_optdef app_opt [] =
     TWOPT_CHAR("codes-config", conf_file_name, "name of codes configuration file"),
     TWOPT_CHAR("worktrace", worktrace_file_name, "workload trace of workunit"),
     TWOPT_CHAR("jobtrace", jobtrace_file_name, "job trace"),
+    TWOPT_CHAR("output", output_file_name, "output file name"),
     {TWOPT_END()}
 };
 
@@ -42,10 +44,6 @@ int main(
 {
     int nprocs;
     int rank;
-    
-    event_log = fopen("awesim_output.log","w");
-
-    /*printf("I am here: line number %d in file %s\n", __LINE__, __FILE__);*/
     
     /* TODO: explain why we need this (ROSS has cutoff??) */
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
@@ -67,6 +65,12 @@ int main(
         fprintf(stderr, "Expected \"worktrace\" option, please see --help.\n");
         MPI_Finalize();
         return 1;
+    }
+
+    if (!output_file_name[0]) {
+        event_log = fopen("awesim_output.log","w");
+    } else {
+    	event_log = fopen(output_file_name, "w");
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
