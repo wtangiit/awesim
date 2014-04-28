@@ -189,6 +189,7 @@ void handle_kick_off_event(
     tw_lp * lp)
 {
     tw_stime offset = ns_tw_lookahead + s_to_ns(lp->gid / 1000);
+
     send_work_checkout_request(lp, offset);
     return;
 }

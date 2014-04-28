@@ -253,9 +253,9 @@ void handle_job_submit_event(
     tw_lp * lp)
 {
     char* job_id = m->object_id;
-    fprintf(event_log, "%lf;awe_server;%lu;JQ;job=%s\n", now_sec(lp), lp->gid, job_id);
     Job* job = g_hash_table_lookup(job_map, job_id);
     assert(job);
+    fprintf(event_log, "%lf;awe_server;%lu;JQ;jobid=%s inputsize=%llu\n", now_sec(lp), lp->gid, job_id, job->inputsize);
     parse_ready_tasks(job, lp);
     return;
 }
@@ -285,13 +285,13 @@ void handle_work_enqueue_event(
             msg->event_type = WORK_CHECKOUT;
             strcpy(msg->object_id, workid);
             tw_event_send(e);
+            fprintf(event_log, "%lf;awe_server;%lu;WC;work=%s client=%lu\n", now_sec(lp), lp->gid, workid, *clientid);
             free(workid);
             free(clientid);
         }
     }
     return;
 }
-
 
 void handle_work_checkout_event(
     awe_server_state * ns,

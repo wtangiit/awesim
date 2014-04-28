@@ -130,6 +130,7 @@ typedef struct Job {
     char username[MAX_NAME_LENGTH_WKLD];
     char project[MAX_NAME_LENGTH_WKLD];
     char pipeline[MAX_NAME_LENGTH_WKLD];
+    uint64_t inputsize;
     int num_tasks;
     int remain_tasks;
     int task_splits[MAX_NUM_TASKS];

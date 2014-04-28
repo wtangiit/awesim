@@ -222,12 +222,15 @@ Job* parse_job_by_trace(gchar* line) {
         gchar **pair = g_strsplit(parts[i], "=", 2);
         char* key = pair[0];
         char* val = pair[1];
+        char *endptr;
         if (strcmp(key, "jobid")==0) {
             strcpy(jb->id, val);
         } else if (strcmp(key, "queued")==0) {
             jb->stats.created = atoi(val);
         } else if (strcmp(key, "num_tasks")==0) {
             jb->num_tasks = atoi(val);
+        } else if (strcmp(key, "inputsize")==0) {
+        	jb->inputsize = strtoll(val, &endptr, 10);
         }
     }
     if (jb->num_tasks==0) {
