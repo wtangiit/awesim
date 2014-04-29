@@ -237,6 +237,9 @@ void handle_kick_off_event(
         awe_msg *msg;
         tw_stime submit_time;
         submit_time =  s_to_ns(etime_to_stime(job->stats.created)) + ns_tw_lookahead;
+        if (fraction < 1.0) {
+        	submit_time = submit_time * fraction;
+        }
         e = codes_event_new(lp->gid, submit_time, lp);
         msg = tw_event_data(e);
         msg->event_type = JOB_SUBMIT;

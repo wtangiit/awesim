@@ -25,6 +25,7 @@ static char conf_file_name[256]={0};
 char worktrace_file_name[256]={0};
 char jobtrace_file_name[256]={0};
 char output_file_name[256]={0};
+int fraction_arg = 0;
 /* this struct contains default parameters used by ROSS, as well as
  * user-specific arguments to be handled by the ROSS config sys. Pass it in
  * prior to calling tw_init */
@@ -35,6 +36,7 @@ const tw_optdef app_opt [] =
     TWOPT_CHAR("worktrace", worktrace_file_name, "workload trace of workunit"),
     TWOPT_CHAR("jobtrace", jobtrace_file_name, "job trace"),
     TWOPT_CHAR("output", output_file_name, "output file name"),
+    TWOPT_UINT("fraction", fraction_arg, "fraction of job arrival intervals (1-99, meaning 1%-99%)"),
     {TWOPT_END()}
 };
 
@@ -71,6 +73,11 @@ int main(
         event_log = fopen("awesim_output.log","w");
     } else {
     	event_log = fopen(output_file_name, "w");
+    }
+
+    if (fraction_arg > 0 && fraction_arg < 100) {
+    	fraction = fraction_arg / 100.0;
+    	printf("job arrival intervals compressed to %f of original values\n", fraction);
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);

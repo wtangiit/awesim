@@ -7,6 +7,8 @@
 int net_id = 0;
 FILE *event_log = NULL;
 
+float fraction = 1.0;
+
 static Workunit* parse_workunit_by_trace(gchar * line);
 static Job* parse_job_by_trace(gchar *line);
 
