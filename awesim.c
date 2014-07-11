@@ -11,6 +11,7 @@
 #include "lp_awe_server.h"
 #include "lp_awe_client.h"
 #include "lp_shock.h"
+#include "lp_shock_router.h"
 
 #include "ross.h"
 #include "codes/codes.h"
@@ -46,6 +47,7 @@ int main(
 {
     int nprocs;
     int rank;
+    int num_nets, *net_ids;
     
     /* TODO: explain why we need this (ROSS has cutoff??) */
     g_tw_ts_end = s_to_ns(60*60*24*365); /* one year, in nsecs */
@@ -92,21 +94,37 @@ int main(
         return 1;
     }
     
+
     /* Setup the model-net parameters specified in the global config object,
-     * returned is the identifier for the network type */
-    net_id = model_net_set_params();
-    printf("netid=%d\n", net_id);
+     * returned are the identifier(s) for the network type. In this example, we
+     * only expect one*/
+    net_ids = model_net_set_params(&num_nets);
+    assert(num_nets==1);
+    net_id = *net_ids;
+    free(net_ids);
+    /* in this example, we are using simplenet, which simulates point to point
+     * communication between any two entities (other networks are trickier to
+     * setup). Hence: */
     if(net_id != SIMPLEWAN)
     {
-	    printf("\n please configure with simple_wan network.\n ");
-	    MPI_Finalize();
-	    return 0;
+    	printf("\n The test works with simple-wan configuration only! ");
+        MPI_Finalize();
+        return 0;
     }
+
+    /*example code to use two different network*/
+    /*net_ids = model_net_set_params(&num_nets);
+    assert(num_nets==1);
+    net_id_in = net_ids[0];
+    net_id_out = net_ids[1];
+    free(net_ids);
+    */
         
     /* register the server LP type with codes-base 
      * (model-net LP type is registered internally in model_net_set_params() */
-    register_lp_awe_server();
     register_lp_shock();
+    register_lp_shock_router();
+    register_lp_awe_server();
     register_lp_awe_client();
         
     /* Setup takes the global config object, the registered LPs, and 

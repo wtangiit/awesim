@@ -2,6 +2,7 @@
 #include "awe_types.h"
 #include "lp_awe_server.h"
 #include "lp_shock.h"
+#include "lp_shock_router.h"
 
 #include <string.h>
 #include <assert.h>
@@ -128,13 +129,13 @@ void lpf_awe_client_event(
         case WORK_CHECKOUT:
             handle_work_checkout_event(ns, b, m, lp);
             break;
-        case INPUT_DATA_DOWNLOAD:
+        case DNLOAD_ACK:
             handle_input_downloaded_event(ns, b, m, lp);
             break;
         case COMPUTE_DONE:
             handle_compute_done_event(ns, b, m, lp);
             break;
-        case OUTPUT_UPLOADED:
+        case UPLOAD_ACK:
             handle_output_uploaded_event(ns, b, m, lp);
             break;
         default:
@@ -290,11 +291,12 @@ void send_work_done_notification(char* work_id, tw_lp *lp) {
 void send_data_download_request(char* work_id, uint64_t size, tw_lp *lp) {
     tw_event *e;
     awe_msg *msg;
-    tw_lpid dest_id = get_shock_lp_id();
+    tw_lpid dest_id = get_shock_router_lp_id();
     e = codes_event_new(dest_id, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
-    msg->event_type = DOWNLOAD_REQUEST;
+    msg->event_type = DNLOAD_REQ;
     msg->src = lp->gid;
+    msg->next_hop = get_shock_lp_id();
     msg->size = size;
     strcpy(msg->object_id, work_id);
     tw_event_send(e);
@@ -305,18 +307,20 @@ void upload_output_data(char* work_id, uint64_t size, tw_lp *lp) {
     awe_msg m_remote;
     /*awe_msg m_local;*/
     
-    tw_lpid dest_id = get_shock_lp_id();
+    tw_lpid dest_id = get_shock_router_lp_id();
     
-    m_remote.event_type = OUTPUT_DATA_UPLOAD;
+    m_remote.event_type = UPLOAD_REQ;
     m_remote.src = lp->gid;
+    m_remote.next_hop = get_shock_lp_id();
     strcpy(m_remote.object_id, work_id);
     m_remote.size =  size;
     
     Workunit* work = g_hash_table_lookup(work_map, work_id);
     work->stats.st_upload_start = now_sec(lp);
 
-    model_net_event(net_id, "upload", dest_id, size, sizeof(awe_msg),
+    model_net_event(net_id, "upload", dest_id, size, 0.0, sizeof(awe_msg),
             (const void*)&m_remote, 0, NULL, lp);
+
     return;
 }
 

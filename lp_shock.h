@@ -14,5 +14,5 @@
 extern void register_lp_shock();
 extern tw_lpid get_shock_lp_id();
 
-#endif	/* LP_SHOCK_H */
+#endif	/* LP_ENDPOINT_H */
 

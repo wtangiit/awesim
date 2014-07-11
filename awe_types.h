@@ -41,12 +41,19 @@ enum awe_event_type
     COMPUTE_DONE,
     OUTPUT_DATA_UPLOAD, /* client -> shock, to upload output data*/
     OUTPUT_UPLOADED,  /* client -> client, local event for OUTPUT_DATA_UPLOAD*/
+    /*following are data related events*/
+    UPLOAD_REQ, /* client->endpoint, endpoint->shock*/
+    UPLOAD_ACK, /* shock->endpoint, endpoint->client*/
+    DNLOAD_REQ, /* client->endpoint, endpoint->shock*/
+    DNLOAD_ACK, /* shock->endpoint, endpoint->client*/
 };
 
 typedef struct awe_msg awe_msg;
 struct awe_msg {
     enum awe_event_type event_type;
     tw_lpid src;          /* source of this request or ack */
+    tw_lpid next_hop;          /* for fwd msg, next hop to forward */
+    tw_lpid last_hop;          /* for fwd msg, last hop before forward */
     char object_id[MAX_LENGTH_ID]; 
     uint64_t size;  /*data size*/
     int incremented_flag; /* helper for reverse computation */

@@ -112,10 +112,10 @@ void lpf_shock_event(
         case KICK_OFF:
            handle_kick_off_event(ns, b, m, lp);
            break;
-        case DOWNLOAD_REQUEST:   
+        case DNLOAD_REQ:
             handle_data_download_event(ns, b, m, lp);
             break;
-        case OUTPUT_DATA_UPLOAD:
+        case UPLOAD_REQ:
             handle_data_upload_event(ns, b, m, lp);
             break;
         default:
@@ -174,14 +174,15 @@ void handle_data_download_event(
     awe_msg m_remote;
     tw_lpid dest_id = m->src;
     
-    m_remote.event_type = INPUT_DATA_DOWNLOAD;
+    m_remote.event_type = DNLOAD_ACK;
     m_remote.src = lp->gid;
+    m_remote.next_hop = m->last_hop;
     strcpy(m_remote.object_id, m->object_id);
     m_remote.size =  m->size;
 
     //printf("[%lf][shock][%lu][StartSending]client=%lu;filesize=%llu\n", now_sec(lp), lp->gid, m->src, m->size);
 
-    model_net_event(net_id, "download", dest_id, m->size, sizeof(awe_msg), (const void*)&m_remote, 0, NULL, lp);
+    model_net_event(net_id, "download", dest_id, m->size, 0.0, sizeof(awe_msg), (const void*)&m_remote, 0, NULL, lp);
     
     ns->size_download += m->size;
    
@@ -202,8 +203,9 @@ void handle_data_upload_event(
     tw_lpid dest_id = m->src;
     e = codes_event_new(dest_id, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
-    msg->event_type = OUTPUT_UPLOADED;
+    msg->event_type = UPLOAD_ACK;
     msg->src = lp->gid;
+    msg->next_hop = m->last_hop;
     msg->size = m->size;
     strcpy(msg->object_id, m->object_id);
     tw_event_send(e);
