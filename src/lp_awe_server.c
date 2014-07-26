@@ -55,6 +55,9 @@ static void plan_work_enqueue_event(char* work_id, tw_lp *lp) ;
 
 /*awe-server specific functions*/
 static void parse_ready_tasks(Job* job, tw_lp * lp);
+static char* get_first_work_by_stage(int stage);
+static int client_match_work(tw_lpid clientid, char* workid);
+static int get_group_id(tw_lpid client_id);
 
 /* set up the function pointers for ROSS, as well as the size of the LP state
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
@@ -275,23 +278,38 @@ void handle_work_enqueue_event(
     workid = malloc(sizeof(char[MAX_LENGTH_ID]));
     strcpy(workid, m->object_id);
     assert(workid);
-    g_queue_push_tail(work_queue, workid);
+    tw_lpid *clientid;
+    int has_match = 0;
+
+    int len = g_queue_get_length(client_req_queue);
+    if (len > 0) {
+    	int n = -1;
+    	for (int i=0; i<len; i++) {
+    		clientid = g_queue_peek_nth(client_req_queue, i);
+    		if (client_match_work(*clientid, workid)) {
+    			 n = i;
+    			 break;
+    		}
+    	}
+    	if (n >=0) {
+    		clientid = g_queue_pop_nth(client_req_queue, n);
+    		has_match = 1;
+    	}
+    }
     
-    if (!g_queue_is_empty(client_req_queue)) {
-        char* workid = g_queue_pop_head(work_queue);
-        if (workid) {
-            tw_lpid *clientid = g_queue_pop_head(client_req_queue);
-            tw_event *e;
-            awe_msg *msg;
-            e = codes_event_new(*clientid, ns_tw_lookahead, lp);
-            msg = tw_event_data(e);
-            msg->event_type = WORK_CHECKOUT;
-            strcpy(msg->object_id, workid);
-            tw_event_send(e);
-            fprintf(event_log, "%lf;awe_server;%lu;WC;work=%s client=%lu\n", now_sec(lp), lp->gid, workid, *clientid);
-            free(workid);
-            free(clientid);
-        }
+    if (has_match) {
+        tw_event *e;
+        awe_msg *msg;
+        e = codes_event_new(*clientid, ns_tw_lookahead, lp);
+        msg = tw_event_data(e);
+        msg->event_type = WORK_CHECKOUT;
+        strcpy(msg->object_id, workid);
+        tw_event_send(e);
+        fprintf(event_log, "%lf;awe_server;%lu;WC;work=%s client=%lu\n", now_sec(lp), lp->gid, workid, *clientid);
+        free(workid);
+        free(clientid);
+    } else {
+    	g_queue_push_tail(work_queue, workid);
     }
     return;
 }
@@ -304,21 +322,45 @@ void handle_work_checkout_event(
 {
     tw_event *e;
     awe_msg *msg;
-   
+
+
     e = codes_event_new(m->src, ns_tw_lookahead, lp);
     msg = tw_event_data(e);
     msg->event_type = WORK_CHECKOUT;
-    
-    /*if queue is empty, msg->object_id is "", otherwise msg->object-id is the dequeued workid*/
     memset(msg->object_id, 0, sizeof(msg->object_id));
+    
+    tw_lpid client_id = m->src;
+//    char group_name[MAX_LENGTH_GROUP];
+    //char lp_type_name[MAX_LENGTH_GROUP];
+    //int  lp_type_id, grp_id, grp_rep_id, offset;
+ //   codes_mapping_get_lp_info(client_id, group_name, &grp_id, &lp_type_id,
+   //         lp_type_name, &grp_rep_id, &offset);
+
+    int group_id = 0;
+    group_id = get_group_id(client_id);
+
+    /*if queue is empty, msg->object_id is "", otherwise msg->object-id is the dequeued workid*/
+    int got_work = 0;
+    char workid[MAX_LENGTH_ID];
     if (!g_queue_is_empty(work_queue)) {
-        char workid[MAX_LENGTH_ID];
-        strcpy(workid, g_queue_pop_head(work_queue));
+        if (group_id == 1) {  //client from remote site
+            char* work = get_first_work_by_stage(5); //checkout task 5 (blat) only for remote site
+            if (work) {
+            	strcpy(workid, work);
+            	got_work = 1;
+            }
+        } else {
+        	strcpy(workid, g_queue_pop_head(work_queue));
+        	got_work = 1;
+        }
+    }
+
+    if (got_work) { //eligible work found, send back to the requesting client
         fprintf(event_log, "%lf;awe_server;%lu;WC;work=%s client=%lu\n", now_sec(lp), lp->gid, workid, m->src);
         assert (strlen(workid) > 10);
         strcpy(msg->object_id, workid);
         tw_event_send(e);
-    } else{
+    } else {  //no eligible work found, put client request to the waiting queue
         tw_lpid *clientid = NULL;
         clientid = malloc(sizeof(tw_lpid));
         *clientid = m->src;
@@ -395,3 +437,49 @@ void plan_work_enqueue_event(char* work_id, tw_lp *lp) {
     strcpy(msg->object_id, work_id);
     tw_event_send(e);
 }
+
+char* get_first_work_by_stage(int stage) {
+	char *workid = NULL;
+	int len = g_queue_get_length(work_queue);
+    int n = -1;
+	for (int i=0; i<len; i++) {
+	    workid = g_queue_peek_nth(work_queue, i);
+        gchar **seg = g_strsplit(workid, "_", 3);
+        int taskid = atoi(seg[1]);
+        if (taskid == stage) {
+        	n = i;
+        	break;
+        }
+	}
+	if (n >= 0) {
+		return g_queue_pop_nth(work_queue, n);
+	}
+	return NULL;
+}
+
+int client_match_work(tw_lpid client_id, char* workid) {
+    int match = 1;
+    //char group_name[MAX_LENGTH_GROUP];
+    //char lp_type_name[MAX_LENGTH_GROUP];
+    //codes_mapping_get_lp_info(clientid, group_name, grp_id, lp_type_id, lp_type_name, grp_rep_id, offset);
+
+    int group_id = 0;
+    group_id = get_group_id(client_id);
+    if (group_id == 1) {  //remote client
+    	gchar **seg = g_strsplit(workid, "_", 3);
+    	int taskid = atoi(seg[1]);
+    	if (taskid != 5) {
+    		match = 0;
+    	}
+    }
+    return match;
+}
+
+int get_group_id(tw_lpid client_id) {
+    if (client_id < 55) {  //TO-DO, make the pivot configurable, or use code_mapping_get_lp_info directly in the future
+    	return 0;
+    } else {
+        return 1;
+    }
+}
+

@@ -147,4 +147,3 @@ int main(
     fclose(event_log);
     return 0;
 }
-

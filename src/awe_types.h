@@ -13,6 +13,7 @@
 #define MAX_LENGTH_UUID 36
 #define MAX_LENGTH_ID 45
 #define MAX_LENGTH_STATE 15
+#define MAX_LENGTH_GROUP 20
 #define MAX_NAME_LENGTH_WKLD 512
 #define MAX_IO_FILE_NUM 100
 #define MAX_NUM_TASKS 30
@@ -107,6 +108,8 @@ struct DataObj {
 typedef struct Workunit Workunit;
 struct Workunit {
     char id[MAX_LENGTH_ID];
+    char jobid[MAX_LENGTH_ID];
+    int stage;
     int rank;
     int num_inputs;
     DataObj Inputs[MAX_IO_FILE_NUM];

@@ -152,7 +152,11 @@ Workunit* parse_workunit_by_trace(gchar* line) {
         char* val = pair[1];
         char *endptr;
         if (strcmp(key, "workid")==0) {
-            strcpy(work->id, val);
+             strcpy(work->id, val);
+             gchar **seg = g_strsplit(val, "_", 3);
+             strcpy(work->jobid, seg[0]);
+             work->stage = atoi(seg[1]);
+             work->rank = atoi(seg[2]);
         } else if (strcmp(key, "cmd")==0) {
             strcpy(work->cmd, val);
         } else if (strcmp(key, "runtime")==0) {
@@ -247,4 +251,6 @@ Job* parse_job_by_trace(gchar* line) {
     }
     return jb;
 }
+
+
 

@@ -12,6 +12,8 @@
 #include "glib.h"
 #include "awe_types.h"
 
+#define DATA_AWARE = 1
+
 #define MAX_LEN_TRACE_LINE 2048
 
 #define Mega 1048576
