@@ -18,6 +18,8 @@ GHashTable *job_map=NULL;
 static GQueue* work_queue;
 static GQueue* client_req_queue;
 
+int WorkOrder[11] ={10, 5, 8, 4, 7, 9, 6, 3, 2, 0, 1};
+
 /* define state*/
 typedef struct awe_server_state awe_server_state;
 /* this struct serves as the ***persistent*** state of the LP representing the 
@@ -56,8 +58,10 @@ static void plan_work_enqueue_event(char* work_id, tw_lp *lp) ;
 /*awe-server specific functions*/
 static void parse_ready_tasks(Job* job, tw_lp * lp);
 static char* get_first_work_by_stage(int stage);
+static char* get_first_work_by_greedy(int order[MAX_NUM_TASKS]);
 static int client_match_work(tw_lpid clientid, char* workid);
 static int get_group_id(tw_lpid client_id);
+
 
 /* set up the function pointers for ROSS, as well as the size of the LP state
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
@@ -122,8 +126,7 @@ void init_awe_server() {
     printf("[awe_server]total valid jobs: %d\n", g_hash_table_size (job_map));
 }
 
-void register_lp_awe_server()
-{
+void register_lp_awe_server() {
     /* lp_type_register should be called exactly once per process per 
      * LP type */
     lp_type_register("awe_server", awe_server_get_lp_type());
@@ -343,8 +346,13 @@ void handle_work_checkout_event(
     int got_work = 0;
     char workid[MAX_LENGTH_ID];
     if (!g_queue_is_empty(work_queue)) {
-        if (group_id == 1) {  //client from remote site
-            char* work = get_first_work_by_stage(5); //checkout task 5 (blat) only for remote site
+        if (group_id == 1 && sched_policy>0) {  //client from remote site
+            char* work = NULL;
+            if (sched_policy==1) {
+                work = get_first_work_by_stage(5); //checkout task 5 (blat) only for remote site
+            } else if (sched_policy==2) {
+            	work = get_first_work_by_greedy(WorkOrder);
+            }
             if (work) {
             	strcpy(workid, work);
             	got_work = 1;
@@ -455,6 +463,19 @@ char* get_first_work_by_stage(int stage) {
 		return g_queue_pop_nth(work_queue, n);
 	}
 	return NULL;
+}
+
+char* get_first_work_by_greedy(int order[MAX_NUM_TASKS]) {
+	int num_task = order[MAX_NUM_TASKS];
+	assert (num_task > 0);
+	char* work = NULL;
+	for (int i=0; i<num_task; i++) {
+        work = get_first_work_by_stage(order[i]); //checkout task 5 (blat) only for remote site
+        if (work) {
+        	break;
+        }
+	}
+	return work;
 }
 
 int client_match_work(tw_lpid client_id, char* workid) {
