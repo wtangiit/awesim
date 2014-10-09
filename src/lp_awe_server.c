@@ -67,6 +67,7 @@ static int get_group_id(tw_lpid client_id);
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
 tw_lptype awe_server_lp = {
      (init_f) lpf_awe_server_init,
+     (pre_run_f) NULL,
      (event_f) lpf_awe_server_event,
      (revent_f) lpf_awe_server_rev_event,
      (final_f) lpf_awe_server_finalize, 
@@ -134,7 +135,7 @@ void register_lp_awe_server() {
 
 tw_lpid get_awe_server_lp_id() {
     tw_lpid rtn_id;
-    codes_mapping_get_lp_id("AWE_SERVER", "awe_server", 0, 0, &rtn_id);
+    codes_mapping_get_lp_id("AWE_SERVER", "awe_server", NULL, 1, 0, 0, &rtn_id);
     return rtn_id;
 }
 

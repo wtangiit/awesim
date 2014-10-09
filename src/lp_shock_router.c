@@ -51,6 +51,7 @@ static void handle_data_download_ack_event(shock_router_state * ns, tw_bf * b, a
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
 tw_lptype shock_router_lp = {
      (init_f) lpf_shock_router_init,
+     (pre_run_f) NULL,
      (event_f) lpf_shock_router_event,
      (revent_f) lpf_shock_router_rev_event,
      (final_f) lpf_shock_router_finalize,
@@ -74,7 +75,7 @@ void register_lp_shock_router()
 
 tw_lpid get_shock_router_lp_id() {
     tw_lpid rtn_id;
-    codes_mapping_get_lp_id("SHOCK_ROUTER", "shock_router", 0, 0, &rtn_id);
+    codes_mapping_get_lp_id("SHOCK_ROUTER", "shock_router", NULL, 1, 0, 0, &rtn_id);
     return rtn_id;
 }
 

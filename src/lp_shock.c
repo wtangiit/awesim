@@ -49,6 +49,7 @@ static void handle_data_upload_event(shock_state * ns, tw_bf * b, awe_msg * m, t
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
 tw_lptype shock_lp = {
      (init_f) lpf_shock_init,
+     (pre_run_f) NULL,
      (event_f) lpf_shock_event,
      (revent_f) lpf_shock_rev_event,
      (final_f) lpf_shock_finalize, 
@@ -72,7 +73,7 @@ void register_lp_shock()
 
 tw_lpid get_shock_lp_id() {
     tw_lpid rtn_id;
-    codes_mapping_get_lp_id("SHOCK", "shock", 0, 0, &rtn_id);
+    codes_mapping_get_lp_id("SHOCK", "shock", NULL, 1, 0, 0, &rtn_id);
     return rtn_id;
 }
 

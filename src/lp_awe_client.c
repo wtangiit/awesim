@@ -61,6 +61,7 @@ static void upload_output_data(char* work_id, uint64_t size, tw_lp *lp);
  * structure (NOTE: ROSS is in charge of event and state (de-)allocation) */
 tw_lptype awe_client_lp = {
      (init_f) lpf_awe_client_init,
+     (pre_run_f) NULL,
      (event_f) lpf_awe_client_event,
      (revent_f) lpf_awe_client_rev_event,
      (final_f) lpf_awe_client_finalize, 
